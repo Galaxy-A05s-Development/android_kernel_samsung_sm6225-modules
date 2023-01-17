@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
  * Copyright (c) 2016-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #ifndef _NET_CNSS2_H
@@ -20,6 +20,8 @@
  * after WLAN host driver switched to use new APIs
  */
 #define CNSS_API_WITH_DEV
+
+#define CNSS_SSR_DRIVER_DUMP_MAX_REGIONS 32
 
 enum cnss_bus_width_type {
 	CNSS_BUS_WIDTH_NONE,
@@ -98,6 +100,15 @@ enum cnss_bus_event_type {
 	BUS_EVENT_INVALID = 0xFFFF,
 };
 
+enum cnss_wfc_mode {
+	CNSS_WFC_MODE_OFF,
+	CNSS_WFC_MODE_ON,
+};
+
+struct cnss_wfc_cfg {
+	enum cnss_wfc_mode mode;
+};
+
 struct cnss_hang_event {
 	void *hang_event_data;
 	u16 hang_event_data_len;
@@ -112,6 +123,13 @@ struct cnss_uevent_data {
 	enum cnss_driver_status status;
 	void *data;
 };
+
+struct cnss_ssr_driver_dump_entry {
+	char region_name[CNSS_SSR_DRIVER_DUMP_MAX_REGIONS];
+	void *buffer_pointer;
+	size_t buffer_size;
+};
+
 
 struct cnss_wlan_driver {
 	char *name;
@@ -135,6 +153,9 @@ struct cnss_wlan_driver {
 	const struct pci_device_id *id_table;
 	u32 chip_version;
 	enum cnss_driver_mode (*get_driver_mode)(void);
+	int (*collect_driver_dump)(struct pci_dev *pdev,
+				   struct cnss_ssr_driver_dump_entry *input_array,
+				   size_t *num_entries_loaded);
 };
 
 struct cnss_ce_tgt_pipe_cfg {
@@ -296,6 +317,10 @@ extern int cnss_get_mem_seg_count(enum cnss_remote_mem_type type, u32 *seg);
 extern int cnss_get_mem_segment_info(enum cnss_remote_mem_type type,
 				     struct cnss_mem_segment segment[],
 				     u32 segment_count);
+extern int cnss_audio_smmu_map(struct device *dev, phys_addr_t paddr,
+			       dma_addr_t iova, size_t size);
+extern void cnss_audio_smmu_unmap(struct device *dev, dma_addr_t iova,
+				 size_t size);
 extern int cnss_get_pci_slot(struct device *dev);
 extern int cnss_pci_get_reg_dump(struct device *dev, uint8_t *buffer,
 				 uint32_t len);
@@ -304,4 +329,5 @@ extern int cnss_send_buffer_to_afcmem(struct device *dev, char *afcdb,
 				      uint32_t len, uint8_t slotid);
 extern int cnss_reset_afcmem(struct device *dev, uint8_t slotid);
 extern bool cnss_get_fw_cap(struct device *dev, enum cnss_fw_caps fw_cap);
+extern int cnss_set_wfc_mode(struct device *dev, struct cnss_wfc_cfg cfg);
 #endif /* _NET_CNSS2_H */
