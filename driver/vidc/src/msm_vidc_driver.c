@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
+ * Copyright (c) 2023 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2020-2022, The Linux Foundation. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/iommu.h>
@@ -1249,10 +1251,10 @@ int msm_vidc_qbuf_cache_operation(struct msm_vidc_inst *inst,
 		case MSM_VIDC_BUF_OUTPUT:
 			cache_type = MSM_MEM_CACHE_INVALIDATE;
 			offset = buf->data_offset;
-			data_size = inst->max_filled_len;
+			data_size = buf->buffer_size;
 			break;
 		case MSM_VIDC_BUF_OUTPUT_META:
-			cache_type = MSM_MEM_CACHE_CLEAN_INVALIDATE;
+			cache_type = MSM_MEM_CACHE_INVALIDATE;
 			offset = buf->data_offset;
 			data_size = buf->buffer_size - buf->data_offset;
 			break;
@@ -5569,12 +5571,12 @@ int msm_vidc_update_buffer_count(struct msm_vidc_inst *inst, u32 port)
 	return 0;
 }
 
-void msm_vidc_schedule_core_deinit(struct msm_vidc_core *core)
+void msm_vidc_schedule_core_deinit(struct msm_vidc_core *core, bool force_deinit)
 {
 	if (!core)
 		return;
 
-	if (!core->capabilities[FW_UNLOAD].value)
+	if (!(core->capabilities[FW_UNLOAD].value || force_deinit))
 		return;
 
 	cancel_delayed_work(&core->fw_unload_work);
