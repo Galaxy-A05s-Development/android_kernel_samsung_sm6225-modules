@@ -23,6 +23,7 @@ static dev_t dev_major;
 struct btfmcodec_data *btfmcodec;
 struct device_driver driver = {.name = "btfmcodec-driver", .owner = THIS_MODULE};
 struct btfmcodec_char_device *btfmcodec_dev;
+
 #define cdev_to_btfmchardev(_cdev) container_of(_cdev, struct btfmcodec_char_device, cdev)
 #define MIN_PKT_LEN  0x9
 
@@ -94,6 +95,7 @@ static int btfmcodec_dev_release(struct inode *inode, struct file *file)
 {
 	struct btfmcodec_char_device *btfmcodec_dev = cdev_to_btfmchardev(inode->i_cdev);
 	unsigned long flags;
+	int idx;
 
 	BTFMCODEC_INFO("for %s by %s:%d active_clients[%u]\n",
 		       btfmcodec_dev->dev_name, current->comm,
@@ -109,6 +111,16 @@ static int btfmcodec_dev_release(struct inode *inode, struct file *file)
 		/* we need to have separte rx lock for below buff */
 		skb_queue_purge(&btfmcodec_dev->rxq);
 	}
+
+	/* Notify waiting clients that client is closed or killed */
+	for (idx = 0; idx < BTM_PKT_TYPE_MAX; idx++) {
+		btfmcodec_dev->status[idx] = BTM_RSP_NOT_RECV_CLIENT_KILLED;
+		wake_up_interruptible(&btfmcodec_dev->rsp_wait_q[idx]);
+	}
+
+	cancel_work_sync(&btfmcodec_dev->wq_hwep_shutdown);
+	cancel_work_sync(&btfmcodec_dev->wq_hwep_configure);
+	cancel_work_sync(&btfmcodec_dev->wq_prepare_bearer);
 
 	btfmcodec->states.current_state = IDLE;
 	btfmcodec->states.next_state = IDLE;
@@ -140,8 +152,16 @@ static void btfmcodec_dev_rxwork(struct work_struct *work)
 			idx = BTM_PKT_TYPE_PREPARE_REQ;
 			BTFMCODEC_DBG("BTM_BTFMCODEC_PREPARE_AUDIO_BEARER_SWITCH_REQ");
 			if (len == BTM_PREPARE_AUDIO_BEARER_SWITCH_REQ_LEN) {
+				/* there are chances where bearer indication is not recevied,
+				 * So inform waiting thread to unblock itself and move to
+				 * previous state.
+				 */
+				if (btfmcodec_dev->status[BTM_PKT_TYPE_BEARER_SWITCH_IND] == BTM_WAITING_RSP) {
+				  BTFMCODEC_DBG("Notifying waiting beare indications");
+				  btfmcodec_dev->status[BTM_PKT_TYPE_BEARER_SWITCH_IND] = BTM_FAIL_RESP_RECV;
+				  wake_up_interruptible(&btfmcodec_dev->rsp_wait_q[BTM_PKT_TYPE_BEARER_SWITCH_IND]);
+				}
 				btfmcodec_dev->status[idx] = skb->data[0];
-				BTFMCODEC_INFO("prepare wq_prepare_bearer:%p", btfmcodec_dev->wq_prepare_bearer);
 				queue_work(btfmcodec_dev->workqueue, &btfmcodec_dev->wq_prepare_bearer);
 			} else {
 				BTFMCODEC_ERR("wrong packet format with len:%d", len);
@@ -193,6 +213,16 @@ static void btfmcodec_dev_rxwork(struct work_struct *work)
 			}
 			BTFMCODEC_INFO("Rx BTM_BTFMCODEC_BEARER_SWITCH_IND status:%d",
 				status);
+			wake_up_interruptible(&btfmcodec_dev->rsp_wait_q[idx]);
+			break;
+		case BTM_BTFMCODEC_CTRL_LOG_LVL_IND:
+			if (len == BTM_LOG_LVL_IND_LEN) {
+				log_lvl = skb->data[0];
+			} else {
+				BTFMCODEC_ERR("wrong packet format with len:%d", len);
+			}
+			BTFMCODEC_INFO("Rx BTM_BTFMCODEC_CTRL_LOG_LVL_IND status:%d",
+					log_lvl);
 			wake_up_interruptible(&btfmcodec_dev->rsp_wait_q[idx]);
 			break;
 		default:
@@ -331,7 +361,7 @@ static __poll_t btfmcodec_dev_poll(struct file *file, poll_table *wait)
 	mutex_lock(&btfmcodec_dev->lock);
 	/* recheck if the client has released by the driver */
 	if (refcount_read(&btfmcodec_dev->active_clients) == 1) {
-		BTFMCODEC_WARN("port has been closed alreadt");
+		BTFMCODEC_WARN("port has been closed already");
 		mutex_unlock(&btfmcodec_dev->lock);
 		return POLLHUP;
 	}
@@ -435,9 +465,7 @@ static ssize_t btfmcodec_attributes_store(struct device *dev,
 	mutex_lock(&btfmcodec_dev->lock);
 	if (kstrtol(buf, 0, &tmp)) {
 		mutex_unlock(&btfmcodec_dev->lock);
-/*		BTFMCODEC_ERR("unable to convert string to int for /dev/%s\n",
-			      btfmcodec->dev->name);
-*/		return -EINVAL;
+		return -EINVAL;
 	}
 	mutex_unlock(&btfmcodec_dev->lock);
 
@@ -589,9 +617,9 @@ static void __exit btfmcodec_deinit(void)
 {
 	struct btfmcodec_char_device *btfmcodec_dev;
 	struct device *dev;
-	BTFMCODEC_INFO("cleaning up btfm codec driver", __func__);
+	BTFMCODEC_INFO("%s: cleaning up btfm codec driver", __func__);
 	if (!btfmcodec) {
-		BTFMCODEC_ERR("skiping driver cleanup", __func__);
+		BTFMCODEC_ERR("%s: skiping driver cleanup", __func__);
 		goto info_cleanup;
 	}
 
@@ -601,7 +629,7 @@ static void __exit btfmcodec_deinit(void)
 	put_device(dev);
 
 	if (!btfmcodec->btfmcodec_dev) {
-		BTFMCODEC_ERR("skiping device node cleanup", __func__);
+		BTFMCODEC_ERR("%s: skiping device node cleanup", __func__);
 		goto info_cleanup;
 	}
 
@@ -613,7 +641,7 @@ static void __exit btfmcodec_deinit(void)
 	kfree(btfmcodec_dev);
 info_cleanup:
 	kfree(btfmcodec);
-	BTFMCODEC_INFO("btfm codec driver cleanup completed", __func__);
+	BTFMCODEC_INFO("%s: btfm codec driver cleanup completed", __func__);
 	return;
 }
 

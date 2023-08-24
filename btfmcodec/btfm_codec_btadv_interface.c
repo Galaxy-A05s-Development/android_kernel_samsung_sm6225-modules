@@ -30,7 +30,8 @@ void btfmcodec_initiate_hwep_shutdown(struct btfmcodec_char_device *btfmcodec_de
 		if (*status == BTM_RSP_RECV) {
 			BTFMCODEC_ERR("sucessfully closed hwep");
 			return;
-		} else if (*status == BTM_FAIL_RESP_RECV) {
+		} else if (*status == BTM_FAIL_RESP_RECV ||
+			   *status == BTM_RSP_NOT_RECV_CLIENT_KILLED) {
 			BTFMCODEC_ERR("Failed to close hwep");
 			return;
 		}
@@ -136,6 +137,9 @@ int btfmcodec_wait_for_bearer_ind(struct btfmcodec_char_device *btfmcodec_dev)
 		} else if (*status == BTM_FAIL_RESP_RECV) {
 			BTFMCODEC_ERR("Rx BTM_BEARER_SWITCH_IND with failure status");
 			ret = -1;
+		} else if (*status == BTM_RSP_NOT_RECV_CLIENT_KILLED) {
+			BTFMCODEC_ERR("client killed so moving further");
+			ret = -1;
 		}
 	}
 
@@ -151,6 +155,7 @@ int btfmcodec_initiate_hwep_configuration(struct btfmcodec_char_device *btfmcode
 
 	schedule_work(&btfmcodec_dev->wq_hwep_configure);
 
+	*status = BTM_WAITING_RSP;
 	ret = wait_event_interruptible_timeout(*rsp_wait_q,
 		*status != BTM_WAITING_RSP,
 		msecs_to_jiffies(BTM_MASTER_CONFIG_RSP_TIMEOUT));
@@ -162,7 +167,8 @@ int btfmcodec_initiate_hwep_configuration(struct btfmcodec_char_device *btfmcode
 	} else {
 		if (*status == BTM_RSP_RECV) {
 			ret = 0;
-		} else if (*status == BTM_FAIL_RESP_RECV) {
+		} else if (*status == BTM_FAIL_RESP_RECV ||
+			   *status == BTM_RSP_NOT_RECV_CLIENT_KILLED) {
 			BTFMCODEC_ERR("Failed to close hwep moving back to previous state");
 			ret = -1;
 		}
@@ -185,8 +191,8 @@ void btfmcodec_configure_hwep(struct btfmcodec_char_device *btfmcodec_dev)
 		btfmcodec_revert_current_state(state);
 	}
 
-	ret = btfmcodec_frame_transport_switch_ind_pkt(btfmcodec_dev,
-				btfmcodec_get_current_transport(state), status);
+	ret = btfmcodec_frame_prepare_bearer_rsp_pkt(btfmcodec_dev,
+		btfmcodec_get_current_transport(state), status);
 
 	if (status != MSG_SUCCESS)
 		return;
@@ -300,6 +306,13 @@ void btfmcodec_prepare_bearer(struct btfmcodec_char_device *btfmcodec_dev,
 				btfmcodec_initiate_hwep_shutdown(btfmcodec_dev);
 			}
 		}
+	} else if (new_transport == NONE) {
+		/* Let ALSA handles the transport close  for BT */
+		if (current_state != BT_Connecting && current_state != BT_Connected)
+			btfmcodec_set_current_state(state, IDLE);
+		btfmcodec_frame_prepare_bearer_rsp_pkt(btfmcodec_dev, (uint8_t)current_state,
+							MSG_SUCCESS);
+		return;
 	}
 }
 
@@ -309,6 +322,6 @@ void btfmcodec_wq_prepare_bearer(struct work_struct *work)
 						struct btfmcodec_char_device,
 						wq_prepare_bearer);
 	int idx = BTM_PKT_TYPE_PREPARE_REQ;
-	BTFMCODEC_INFO(": with new transport:%d", btfmcodec_dev->status[idx]);
+	BTFMCODEC_INFO("with new transport:%d", btfmcodec_dev->status[idx]);
 	btfmcodec_prepare_bearer(btfmcodec_dev, btfmcodec_dev->status[idx]);
 }
