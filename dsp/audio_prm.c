@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
  * Copyright (c) 2019-2021, The Linux Foundation. All rights reserved.
- * Copyright (c) 2022 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2022-2023 Qualcomm Innovation Center, Inc. All rights reserved.
  */
 
 #include <linux/slab.h>
@@ -70,7 +70,7 @@ static int audio_prm_callback(struct gpr_device *adev, void *data)
 			atomic_set(&g_prm.state, payload[1]);
 			break;
 		default:
-			pr_err("%s: hit default case",__func__);
+			pr_info("%s: hit default case",__func__);
 			break;
 		};
 	default:
@@ -236,6 +236,7 @@ int audio_prm_set_lpass_core_clk_req(struct clk_cfg *cfg, uint32_t hw_core_id, u
 
 	//pr_err("%s: clk_id %d size of cmd_req %ld \n",__func__, cfg->clk_id, sizeof(prm_cmd_request_hw_core_t));
 
+	memset(&prm_rsc_request, 0, sizeof(prm_rsc_request));
 	prm_rsc_request.payload_header.payload_address_lsw = 0;
 	prm_rsc_request.payload_header.payload_address_msw = 0;
 	prm_rsc_request.payload_header.mem_map_handle = 0;
@@ -549,6 +550,7 @@ int audio_prm_set_vote_against_sleep(uint8_t enable)
 	else
 		pkt->hdr.opcode = PRM_CMD_RELEASE_HW_RSC;
 
+	memset(&prm_rsc_request, 0, sizeof(prm_rsc_request));
 	prm_rsc_request.payload_header.payload_address_lsw = 0;
 	prm_rsc_request.payload_header.payload_address_msw = 0;
 	prm_rsc_request.payload_header.mem_map_handle = 0;
@@ -704,7 +706,7 @@ static int audio_prm_probe(struct gpr_device *adev)
 
 	init_waitqueue_head(&g_prm.wait);
 	g_prm.is_adsp_up = true;
-	pr_err("%s: prm probe success\n", __func__);
+	pr_info("%s: prm probe success\n", __func__);
 	return ret;
 }
 
