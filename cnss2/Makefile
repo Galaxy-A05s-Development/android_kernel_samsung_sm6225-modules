@@ -11,6 +11,7 @@ ifeq ($(CONFIG_CNSS_HW_SECURE_DISABLE), y)
 ccflags-y += -I$(WLAN_PLATFORM_ROOT)/../../securemsm-kernel/smcinvoke/
 ccflags-y += -I$(WLAN_PLATFORM_ROOT)/../../securemsm-kernel/linux/
 ccflags-y += -I$(WLAN_PLATFORM_ROOT)/../../securemsm-kernel/include/linux/
+ccflags-y += -I$(WLAN_PLATFORM_ROOT)/../../securemsm-kernel/include/uapi/linux/
 endif
 
 obj-$(CONFIG_CNSS2) += cnss2.o
@@ -22,4 +23,4 @@ cnss2-y += pci.o
 cnss2-y += power.o
 cnss2-y += genl.o
 cnss2-$(CONFIG_PCI_MSM) += pci_qcom.o
-cnss2-$(CONFIG_CNSS2_QMI) += qmi.o coexistence_service_v01.o ip_multimedia_subsystem_private_service_v01.o
+cnss2-$(CONFIG_CNSS2_QMI) += qmi.o coexistence_service_v01.o
