@@ -1,6 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 /*
- * Copyright (c) 2021-2023 Qualcomm Innovation Center, Inc. All rights reserved.
+ * Copyright (c) 2021-2024 Qualcomm Innovation Center, Inc. All rights reserved.
  * Copyright (c) 2015-2021, The Linux Foundation. All rights reserved.
  */
 
@@ -2479,7 +2479,8 @@ static int sde_wb_parse_dt(struct device_node *np, struct sde_mdss_cfg *sde_cfg)
 			set_bit(SDE_WB_SYS_CACHE, &wb->features);
 		}
 
-		rc = _add_to_irq_offset_list(sde_cfg, SDE_INTR_HWBLK_WB, wb->id, wb->base);
+		if (test_bit(SDE_WB_PROG_LINE, sde_cfg->features))
+			rc = _add_to_irq_offset_list(sde_cfg, SDE_INTR_HWBLK_WB, wb->id, wb->base);
 
 		if (test_bit(SDE_FEATURE_DEDICATED_CWB, sde_cfg->features)) {
 			set_bit(SDE_WB_HAS_DCWB, &wb->features);
@@ -5025,6 +5026,7 @@ static int _sde_hardware_pre_caps(struct sde_mdss_cfg *sde_cfg, uint32_t hw_rev)
 		sde_cfg->ts_prefill_rev = 2;
 		sde_cfg->ctl_rev = SDE_CTL_CFG_VERSION_1_0_0;
 		sde_cfg->sui_block_xin_mask = 0x1;
+		clear_bit(SDE_FEATURE_HDR, sde_cfg->features);
 	} else if (IS_LAHAINA_TARGET(hw_rev)) {
 		set_bit(SDE_FEATURE_DEMURA, sde_cfg->features);
 		sde_cfg->demura_supported[SSPP_DMA1][0] = 0;
