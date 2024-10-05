@@ -38,6 +38,7 @@ struct wcd937x_priv {
 	int variant;
 	struct snd_soc_component *component;
 	struct device_node *rst_np;
+	struct device_node *pa_en;
 	struct regmap *regmap;
 
 	struct swr_device *rx_swr_dev;
@@ -113,6 +114,7 @@ struct wcd937x_micbias_setting {
 
 struct wcd937x_pdata {
 	struct device_node *rst_np;
+	struct device_node *pa_en;
 	struct device_node *rx_slave;
 	struct device_node *tx_slave;
 	struct wcd937x_micbias_setting micbias;

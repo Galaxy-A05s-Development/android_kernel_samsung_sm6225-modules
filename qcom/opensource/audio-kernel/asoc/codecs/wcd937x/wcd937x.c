@@ -41,6 +41,10 @@
 
 #define NUM_ATTEMPTS 5
 
+//zhangsen1
+#define PA_ENABLE 1
+#define PA_DISABLE 0
+
 #define WCD937X_RATES (SNDRV_PCM_RATE_8000 | SNDRV_PCM_RATE_16000 |\
 			SNDRV_PCM_RATE_32000 | SNDRV_PCM_RATE_48000 |\
 			SNDRV_PCM_RATE_96000 | SNDRV_PCM_RATE_192000 |\
@@ -73,6 +77,7 @@ static const DECLARE_TLV_DB_SCALE(analog_gain, 0, 25, 1);
 static int wcd937x_handle_post_irq(void *data);
 static int wcd937x_reset(struct device *dev);
 static int wcd937x_reset_low(struct device *dev);
+static int impulsed_pa_en(bool en, struct device *dev);
 
 static const struct regmap_irq wcd937x_irqs[WCD937X_NUM_IRQS] = {
 	REGMAP_IRQ_REG(WCD937X_IRQ_MBHC_BUTTON_PRESS_DET, 0, 0x01),
@@ -1060,9 +1065,13 @@ static int wcd937x_codec_enable_aux_pa(struct snd_soc_dapm_widget *w,
 			wcd937x->update_wcd_event(wcd937x->handle,
 						SLV_BOLERO_EVT_RX_MUTE,
 						(WCD_RX3 << 0x10));
+		//zhangsen1
+		impulsed_pa_en(PA_ENABLE, wcd937x->dev);
 		wcd_enable_irq(&wcd937x->irq_info, WCD937X_IRQ_AUX_PDM_WD_INT);
 		break;
 	case SND_SOC_DAPM_PRE_PMD:
+		//zhangsen1
+		//impulsed_pa_en(PA_DISABLE, wcd937x->dev);
 		wcd_disable_irq(&wcd937x->irq_info, WCD937X_IRQ_AUX_PDM_WD_INT);
 		if (wcd937x->update_wcd_event)
 			wcd937x->update_wcd_event(wcd937x->handle,
@@ -1078,6 +1087,8 @@ static int wcd937x_codec_enable_aux_pa(struct snd_soc_dapm_widget *w,
 			     hph_mode);
 		snd_soc_component_update_bits(component,
 				WCD937X_DIGITAL_PDM_WD_CTL2, 0x05, 0x00);
+		printk("[zs] gpio stop pa");
+		impulsed_pa_en(PA_DISABLE, wcd937x->dev);
 		break;
 	};
 	return ret;
@@ -3148,7 +3159,7 @@ static int wcd937x_reset(struct device *dev)
 				__func__);
 		return rc;
 	}
-	/* 20ms sleep required after pulling the reset gpio to LOW */
+	/* 20us sleep required after pulling the reset gpio to LOW */
 	usleep_range(20, 30);
 
 	rc = msm_cdc_pinctrl_select_active_state(wcd937x->rst_np);
@@ -3157,11 +3168,128 @@ static int wcd937x_reset(struct device *dev)
 				__func__);
 		return rc;
 	}
-	/* 20ms sleep required after pulling the reset gpio to HIGH */
+	/* 20us sleep required after pulling the reset gpio to HIGH */
 	usleep_range(20, 30);
 
 	return rc;
 }
+
+//zhangsen1 pa en function end
+static int pa_en_gpio_hight(struct device *dev)
+{
+	struct wcd937x_priv *pa = NULL;
+	int rc = 0;
+	int value = 0;
+	dev_info(dev, "%s:[ZS]pa_en_gpio_hight start \n",
+			__func__);
+	if (!dev)
+		return -ENODEV;
+
+	pa = dev_get_drvdata(dev);
+	if (!pa)
+		return -EINVAL;
+
+	if (!pa->pa_en) {
+		dev_err(dev, "%s: reset gpio device node not specified\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	value = msm_cdc_pinctrl_get_state(pa->pa_en);
+	dev_info(dev, "%s [ZS]pa_gpio_value_get %d \n", __func__, value);
+	if (value == 1)
+		return 0;
+
+	rc = msm_cdc_pinctrl_select_active_state(pa->pa_en);
+	dev_info(dev, "%s [ZS]pa_gpio_active_stat %d \n", __func__, rc);
+	if (rc) {
+		dev_err(dev, "%s:[ZS]pa active state request fail!\n",
+				__func__);
+		return rc;
+	}
+	//20us sleep required after pulling the pa_en gpio to HIGH
+
+	usleep_range(20, 30);
+	dev_info(dev, "%s:[ZS]pa_en_gpio_hight end \n",
+			__func__);
+
+	return rc;
+}
+
+static int pa_en_gpio_low(struct device *dev)
+{
+	struct wcd937x_priv *pa = NULL;
+	int rc = 0;
+	int value = 0;
+	dev_info(dev, "%s:[ZS]pa_en_gpio_low start \n",
+			__func__);
+	if (!dev)
+		return -ENODEV;
+
+	pa = dev_get_drvdata(dev);
+	if (!pa)
+		return -EINVAL;
+
+	if (!pa->pa_en) {
+		dev_err(dev, "%s: reset gpio device node not specified\n",
+				__func__);
+		return -EINVAL;
+	}
+
+	value = msm_cdc_pinctrl_get_state(pa->pa_en);
+	dev_info(dev, "%s [ZS]pa_gpio_value_get %d \n", __func__, value);
+	if (value == 0)
+		return 0;
+
+	rc = msm_cdc_pinctrl_select_sleep_state(pa->pa_en);
+	dev_info(dev, "%s [ZS]pa_gpio_sleep_stat %d \n", __func__, rc);
+	if (rc) {
+		dev_err(dev, "%s: wcd sleep state request fail!\n",
+				__func__);
+		return rc;
+	}
+
+	//20us sleep required after pulling the pa_en gpio to LOW
+
+	usleep_range(20, 30);
+	dev_info(dev, "%s:[ZS]pa_en_gpio_low end \n",
+			__func__);
+
+	return rc;
+}
+
+static int impulsed_pa_en(bool en, struct device *dev)
+{
+	int rc = 0;
+
+	dev_info(dev, "%s:[ZS]impulsed_pa_en start \n",
+			__func__);
+	dev_info(dev, "%s:IC model:Awinic87358 \n",
+			__func__);
+	if (en) {
+			//set pa_en_gpio hight
+			rc = pa_en_gpio_hight(dev);
+			if (rc) {
+				dev_err(dev, "%s: pa_en_gpio_hight fail!\n",
+					__func__);
+				return rc;
+			}
+	} else {
+			//set pa_en_gpio low
+			rc = pa_en_gpio_low(dev);
+			if (rc) {
+				dev_err(dev, "%s: pa_en_gpio_low fail!\n",
+					__func__);
+				return rc;
+			}
+	}
+
+	dev_info(dev, "%s:[ZS]impulsed_pa_en end \n",
+			__func__);
+
+	return rc;
+}
+//zhangsen1 pa en function end
 
 static int wcd937x_read_of_property_u32(struct device *dev, const char *name,
 					u32 *val)
@@ -3271,6 +3399,22 @@ struct wcd937x_pdata *wcd937x_populate_dt_data(struct device *dev)
 		return NULL;
 	}
 
+	/*zhansen1 start*/
+	dev_info(dev, "%s: [ZS]pa-en-gpio-node start \n",
+			__func__);
+	pdata->pa_en = of_parse_phandle(dev->of_node,
+			"third,pa-en-gpio-node", 0);
+
+	if (!pdata->pa_en) {
+		dev_err(dev, "%s: Looking up %s property in node %s failed\n",
+				__func__, "third,pa-rst-gpio-node",
+				dev->of_node->full_name);
+		return NULL;
+	}
+	dev_info(dev, "%s: [ZS]pa-en-gpio-node end \n",
+			__func__);
+	/*zhansen1 end*/
+
 	/* Parse power supplies */
 	msm_cdc_get_power_supplies(dev, &pdata->regulator,
 				   &pdata->num_supplies);
@@ -3334,6 +3478,8 @@ static int wcd937x_bind(struct device *dev)
 	wcd937x->dev = dev;
 	wcd937x->dev->platform_data = pdata;
 	wcd937x->rst_np = pdata->rst_np;
+	wcd937x->pa_en = pdata->pa_en;
+
 	ret = msm_cdc_init_supplies(dev, &wcd937x->supplies,
 				    pdata->regulator, pdata->num_supplies);
 	if (!wcd937x->supplies) {
