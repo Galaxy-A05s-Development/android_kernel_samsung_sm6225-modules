@@ -34,7 +34,13 @@ ifeq ($(TOUCH_DLKM_ENABLE),  true)
                         else ifeq ($(TARGET_BOARD_PLATFORM), bengal)
                                 BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/synaptics_tcm_ts.ko \
                                         $(KERNEL_MODULES_OUT)/nt36xxx-i2c.ko \
-					$(KERNEL_MODULES_OUT)/focaltech_fts.ko
+					$(KERNEL_MODULES_OUT)/focaltech_fts.ko \
+					$(KERNEL_MODULES_OUT)/tp_info.ko \
+					$(KERNEL_MODULES_OUT)/lct_tp.ko \
+					$(KERNEL_MODULES_OUT)/cmd.ko \
+					$(KERNEL_MODULES_OUT)/ilitek.ko \
+					$(KERNEL_MODULES_OUT)/icnl9922c.ko \
+					$(KERNEL_MODULES_OUT)/hx83112f.ko
                         else ifeq ($(TARGET_BOARD_PLATFORM), trinket)
                                 BOARD_VENDOR_KERNEL_MODULES += $(KERNEL_MODULES_OUT)/synaptics_tcm_ts.ko
                         else ifeq ($(TARGET_BOARD_PLATFORM), pitti)
